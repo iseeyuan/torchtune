@@ -18,7 +18,7 @@ defaults:
 
 jobs:
   unit_tests:
-    runs-on: 4-core-ubuntu
+    runs-on: 8-core
     strategy:
       matrix:
         python-version: ['3.8']
