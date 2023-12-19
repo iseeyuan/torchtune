@@ -1,6 +1,7 @@
 name: daily integration test
 
 on:
+  pull_request:
   schedule:
   # everyday 11am pacific
     - cron: "0 19 * * *"
