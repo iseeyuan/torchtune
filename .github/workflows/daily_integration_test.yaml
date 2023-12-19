@@ -50,7 +50,7 @@ jobs:
           aws s3 cp s3://pytorch-multimodal/llama2-7b/tokenizer.model test-artifacts
           aws s3 cp s3://pytorch-multimodal/llama2-7b-native-checkpoint test-artifacts
           aws s3 cp s3://pytorch-multimodal/llama2-7b/consolidated.00.pth test-artifacts
-        timeout-minutes: 10
+        timeout-minutes: 30
       - name: Install dependencies
         run: |
           conda install pytorch
