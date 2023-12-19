@@ -8,6 +8,10 @@ on:
   # Have the ability to trigger this job manually
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 defaults:
   run:
     shell: bash -l -eo pipefail {0}
