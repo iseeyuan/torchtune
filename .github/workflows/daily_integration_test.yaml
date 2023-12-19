@@ -48,7 +48,6 @@ jobs:
           aws configure set default.s3.preferred_transfer_client crt
           aws configure set default.s3.target_bandwidth 100Gb/s
           aws s3 cp s3://pytorch-multimodal/llama2-7b/tokenizer.model test-artifacts
-          aws s3 cp s3://pytorch-multimodal/llama2-7b-native-checkpoint test-artifacts
           aws s3 cp s3://pytorch-multimodal/llama2-7b/consolidated.00.pth test-artifacts
         timeout-minutes: 30
       - name: Install dependencies
