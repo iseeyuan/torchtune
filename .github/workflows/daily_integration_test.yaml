@@ -44,7 +44,7 @@ jobs:
         run: |
           python3 -m pip install awscli==1.27.69
           mkdir test-artifacts
-          aws configure set default.s3.max_concurrent_requests 3000
+          aws configure set default.s3.max_concurrent_requests 2500
           aws configure set default.s3.preferred_transfer_client crt
           aws configure set default.s3.target_bandwidth 100Gb/s
           aws s3 cp s3://pytorch-multimodal/llama2-7b/tokenizer.model test-artifacts
