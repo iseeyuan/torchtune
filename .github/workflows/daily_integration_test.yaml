@@ -7,6 +7,9 @@ on:
     - cron: "0 19 * * *"
   # Have the ability to trigger this job manually
   workflow_dispatch:
+  push:
+    branches:
+      - zpao-integration-test-setup
 
 permissions:
   id-token: write
