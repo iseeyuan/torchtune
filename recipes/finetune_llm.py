@@ -138,6 +138,7 @@ def main():
     logger(msg=f"Loaded tokenizer from {args.tokenizer_checkpoint}")
 
     device = args.device
+<<<<<<< HEAD
     model = get_model(args.model, device, vocab_size=tokenizer.vocab_size)
     model.load_state_dict(torch.load(args.model_checkpoint, weights_only=True))
     logger(msg=f"Loaded model from {args.model_checkpoint}")
