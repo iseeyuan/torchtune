@@ -22,4 +22,4 @@ activation_checkpointing: True
 cpu_offload: False
 
 # Metrics arguments
-metric_logger_type: tensorboard
+metric_logger_type: disk

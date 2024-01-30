@@ -3,7 +3,6 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-import os
 import sys
 import time
 from pathlib import Path
@@ -14,12 +13,10 @@ from numpy import ndarray
 from torch import Tensor
 from typing_extensions import Protocol
 
-from torchtune.utils.distributed import get_world_size_and_rank
-
 Scalar = Union[Tensor, ndarray, int, float]
 
 
-class MetricLoggerInterface(Protocol):
+class MetricLogger(Protocol):
     """Abstract metric logger."""
 
     def log(
@@ -54,7 +51,7 @@ class MetricLoggerInterface(Protocol):
         pass
 
 
-class DiskLogger(MetricLoggerInterface):
+class DiskLogger(MetricLogger):
     """Logger to disk.
 
     Args:
@@ -95,7 +92,7 @@ class DiskLogger(MetricLoggerInterface):
         self._file.close()
 
 
-class StdoutLogger(MetricLoggerInterface):
+class StdoutLogger(MetricLogger):
     """Logger to standard output."""
 
     def log(self, name: str, data: Scalar, step: int) -> None:
@@ -114,7 +111,7 @@ class StdoutLogger(MetricLoggerInterface):
         sys.stdout.flush()
 
 
-class WandBLogger(MetricLoggerInterface):
+class WandBLogger(MetricLogger):
     """Logger for use w/ Weights and Biases application (https://wandb.ai/).
     For more information about arguments expected by WandB, see https://docs.wandb.ai/ref/python/init.
 
@@ -179,20 +176,11 @@ class WandBLogger(MetricLoggerInterface):
         self._wandb.finish()
 
 
-class TensorBoardLogger(MetricLoggerInterface):
-    """
-    Logger for use w/ PyTorch's implementation of TensorBoard (https://pytorch.org/docs/stable/tensorboard.html).
-
-    Logs are written only from rank 0.
+class TensorBoardLogger(MetricLogger):
+    """Logger for use w/ PyTorch's implementation of TensorBoard (https://pytorch.org/docs/stable/tensorboard.html).
 
     Args:
         log_dir (str): TensorBoard log directory
-        organize_logs (bool): If `True`, this class will create a subdirectory within `log_dir` for the current
-            run. Having sub-directories allows you to compare logs across runs. When TensorBoard is
-            passed a logdir at startup, it recursively walks the directory tree rooted at logdir looking for
-            subdirectories that contain tfevents data. Every time it encounters such a subdirectory,
-            it loads it as a new run, and the frontend will organize the data accordingly.
-            Recommended value is `True`. Run `tensorboard --logdir my_log_dir` to view the logs.
         **kwargs: additional arguments
 
     Example:
@@ -208,49 +196,26 @@ class TensorBoardLogger(MetricLoggerInterface):
         In order to view TensorBoard logs, you need to run `tensorboard --logdir my_log_dir` in your terminal.
     """
 
-    def __init__(
-        self,
-        log_dir: str,
-        organize_logs: bool = True,
-        **kwargs
-    ) -> None:
+    def __init__(self, log_dir: str, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
-        self._writer: Optional[SummaryWriter] = None
-        _, self._rank = get_world_size_and_rank()
-
-        # In case organize_logs is `True`, update log_dir to include a subdirectory for the
-        # current run
-        self.log_dir = (
-                os.path.join(log_dir, f'run_{self._rank}_{time.time()}')
-                if organize_logs else log_dir
-            )
-
-        # Initialize the log writer only if we're on rank 0.
-        if self._rank == 0:
-            self._writer = SummaryWriter(log_dir=self.log_dir)
+        self._writer = SummaryWriter(log_dir=log_dir)
 
     def log(self, name: str, data: Scalar, step: int) -> None:
-        if self._writer:
-            self._writer.add_scalar(name, data, global_step=step, new_style=True)
+        self._writer.add_scalar(name, data, global_step=step, new_style=True)
 
     def log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
         for name, data in payload.items():
             self.log(name, data, step)
 
     def __del__(self) -> None:
-        if self._writer:
-            self._writer.close()
-            self._writer = None
-
+        self._writer.close()
 
     def close(self) -> None:
-        if self._writer:
-            self._writer.close()
-            self._writer = None
+        self._writer.close()
 
 
-_METRIC_LOGGER_DICT: Dict[str, "MetricLoggerInterface"] = {
+_METRIC_LOGGER_DICT: Dict[str, "MetricLogger"] = {
     "wandb": WandBLogger,
     "tensorboard": TensorBoardLogger,
     "stdout": StdoutLogger,
@@ -267,7 +232,7 @@ def list_metric_loggers() -> List[str]:
     return list(_METRIC_LOGGER_DICT.keys())
 
 
-def get_metric_logger(metric_logger_type: str, **kwargs) -> "MetricLoggerInterface":
+def get_metric_logger(metric_logger_type: str, **kwargs) -> "MetricLogger":
     """Get a metric logger based on provided arguments.
 
     Args:
@@ -278,7 +243,7 @@ def get_metric_logger(metric_logger_type: str, **kwargs) -> "MetricLoggerInterfa
         ValueError: If ``metric_logger`` str is unknown.
 
     Returns:
-        MetricLoggerInterface: metric logger
+        MetricLogger: metric logger
     """
     if metric_logger_type not in _METRIC_LOGGER_DICT:
         raise ValueError(
