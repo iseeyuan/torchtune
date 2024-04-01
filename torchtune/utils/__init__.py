@@ -53,6 +53,10 @@ from .precision import (
     validate_expected_param_dtype,
 )
 from .seed import set_seed
+from .quantization import (
+    get_quantizer,
+    reset_parameters,
+)
 
 __all__ = [
     "save_checkpoint",
@@ -80,4 +84,5 @@ __all__ = [
     "OptimizerInBackwardWrapper",
     "create_optim_in_bwd_wrapper",
     "register_optim_in_bwd_hooks",
+    "get_quantizer",
 ]
