@@ -202,6 +202,8 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             self._steps_per_epoch = self.max_steps_per_epoch
         self.total_training_steps = self.epochs_run * self._steps_per_epoch
 
+        self._perf_profiler = config.instantiate(cfg.perf_profiler)
+
     def _setup_model(
         self,
         cfg_model: DictConfig,
@@ -361,59 +363,68 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             # in case shuffle is True
             self._sampler.set_epoch(curr_epoch)
 
-            for idx, batch in enumerate(pbar := tqdm(self._dataloader)):
-                if (
-                    self.max_steps_per_epoch is not None
-                    and (idx // self._gradient_accumulation_steps)
-                    == self.max_steps_per_epoch
-                ):
-                    break
+            # Showcase how to use pytorch profiler to trace the training loop.
+            with self._perf_profiler:
+                for idx, batch in enumerate(pbar := tqdm(self._dataloader)):
+                    if (
+                        self.max_steps_per_epoch is not None
+                        and (idx // self._gradient_accumulation_steps)
+                        == self.max_steps_per_epoch
+                    ):
+                        break
 
-                input_ids, labels = batch
-                input_ids = input_ids.to(self._device)
-                labels = labels.to(self._device)
-                logits = self._model(input_ids)
-                # Shift so that tokens < n predict n
-                logits = logits[..., :-1, :].contiguous()
-                labels = labels[..., 1:].contiguous()
-                logits = logits.transpose(1, 2)
-                # Compute loss
-                loss = self._loss_fn(logits, labels)
-                # Note: We're always logging the loss before normalizing it
-                # Check if this is the norm or not
-                pbar.set_description(f"{curr_epoch+1}|{idx+1}|Loss: {loss.item()}")
-                if self.total_training_steps % self._log_every_n_steps == 0:
-                    self._metric_logger.log_dict(
-                        {
-                            "loss": loss.item(),
-                            # NOTE: for optim in backward, this assumes all optimizers have the same LR. This is currently
-                            # true since we don't expose the ability to configure this yet.
-                            "lr": (
-                                self._optim_ckpt_wrapper.get_optim_key("lr")
-                                if self._optimizer_in_bwd
-                                else self._optimizer.param_groups[0]["lr"]
-                            ),
-                            "gpu_resources": torch.cuda.memory_allocated(),
-                        },
-                        step=self.total_training_steps,
-                    )
+                    # Send the signal to the profiler that the next step has started
+                    # Only needed when you want to do perf profiling
+                    self._perf_profiler.step()
 
-                loss = loss / self._gradient_accumulation_steps
-                loss.backward()
-                if not self._optimizer_in_bwd and self._should_update_weights(idx):
-                    self._optimizer.step()
-                    self._optimizer.zero_grad(set_to_none=True)
+                    input_ids, labels = batch
+                    input_ids = input_ids.to(self._device)
+                    labels = labels.to(self._device)
+                    logits = self._model(input_ids)
+                    # Shift so that tokens < n predict n
+                    logits = logits[..., :-1, :].contiguous()
+                    labels = labels[..., 1:].contiguous()
+                    logits = logits.transpose(1, 2)
+                    # Compute loss
+                    loss = self._loss_fn(logits, labels)
+                    # Note: We're always logging the loss before normalizing it
+                    # Check if this is the norm or not
+                    pbar.set_description(f"{curr_epoch+1}|{idx+1}|Loss: {loss.item()}")
+                    if self.total_training_steps % self._log_every_n_steps == 0:
+                        self._metric_logger.log_dict(
+                            {
+                                "loss": loss.item(),
+                                # NOTE: for optim in backward, this assumes all optimizers have the same LR. This is currently
+                                # true since we don't expose the ability to configure this yet.
+                                "lr": (
+                                    self._optim_ckpt_wrapper.get_optim_key("lr")
+                                    if self._optimizer_in_bwd
+                                    else self._optimizer.param_groups[0]["lr"]
+                                ),
+                                "gpu_resources": torch.cuda.memory_allocated(),
+                            },
+                            step=self.total_training_steps,
+                        )
 
-                    # Update the number of steps when the weights are updated
-                    self.total_training_steps += 1
-                elif self._optimizer_in_bwd:
-                    self.total_training_steps += 1
+                    loss = loss / self._gradient_accumulation_steps
+                    loss.backward()
+                    if not self._optimizer_in_bwd and self._should_update_weights(idx):
+                        self._optimizer.step()
+                        self._optimizer.zero_grad(set_to_none=True)
 
-                # Log peak memory for iteration
-                if self.total_training_steps % self._log_peak_memory_every_n_steps == 0:
-                    log.info(
-                        utils.memory_stats_log("Memory Stats:", device=self._device)
-                    )
+                        # Update the number of steps when the weights are updated
+                        self.total_training_steps += 1
+                    elif self._optimizer_in_bwd:
+                        self.total_training_steps += 1
+
+                    # Log peak memory for iteration
+                    if (
+                        self.total_training_steps % self._log_peak_memory_every_n_steps
+                        == 0
+                    ):
+                        log.info(
+                            utils.memory_stats_log("Memory Stats:", device=self._device)
+                        )
             self.epochs_run += 1
             self.save_checkpoint(epoch=curr_epoch)
 
