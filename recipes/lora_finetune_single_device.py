@@ -207,7 +207,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             last_epoch=self.total_training_steps - 1,
         )
 
-        self._perf_profiler = config.instantiate(cfg.perf_profiler)
+        self._profiler_enabled = cfg.profiler.enabled
+        self._profiler = config.instantiate(cfg.profiler)
 
     def _setup_model(
         self,
@@ -393,8 +394,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             # in case shuffle is True
             self._sampler.set_epoch(curr_epoch)
 
-            # Showcase how to use pytorch profiler to trace the training loop.
-            with self._perf_profiler:
+            # Optionally profile the training loop
+            with self._profiler:
                 for idx, batch in enumerate(pbar := tqdm(self._dataloader)):
                     if (
                         self.max_steps_per_epoch is not None
@@ -403,7 +404,8 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
                     ):
                         break
 
-                    self._perf_profiler.step()
+                    if self._profiler_enabled:
+                        self._profiler.step()
 
                     input_ids, labels = batch
                     input_ids = input_ids.to(self._device)
