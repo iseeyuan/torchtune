@@ -10,7 +10,7 @@ import numpy as np
 from datasets import load_dataset
 from torch.utils.data import Dataset
 
-from torchtune.data import InstructTemplate, Message
+from torchtune.data import InstructTemplate, Message, validate_messages
 
 from torchtune.data._common import CROSS_ENTROPY_IGNORE_IDX
 from torchtune.modules import Tokenizer
@@ -89,6 +89,8 @@ class InstructDataset(Dataset):
             Message(role="user", content=prompt, masked=(not self.train_on_input)),
             Message(role="assistant", content=transformed_sample[key_output]),
         ]
+
+        validate_messages(messages)
 
         tokens, mask = self._tokenizer.tokenize_messages(
             messages, max_seq_len=self.max_seq_len
